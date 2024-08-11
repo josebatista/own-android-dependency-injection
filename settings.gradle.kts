@@ -21,3 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Own Dependency Manager"
 include(":app")
+include(":common:dependency-manager:di-lib")
+include(":common:dependency-manager:di-processor")
