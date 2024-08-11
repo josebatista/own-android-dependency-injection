@@ -23,3 +23,6 @@ rootProject.name = "Own Dependency Manager"
 include(":app")
 include(":common:dependency-manager:di-lib")
 include(":common:dependency-manager:di-processor")
+include(":feature-a:feature-a-data")
+include(":feature-a:feature-a-domain")
+include(":feature-a:feature-a-presentation")
