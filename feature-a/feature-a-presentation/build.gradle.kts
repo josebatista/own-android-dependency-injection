@@ -33,6 +33,9 @@ android {
 }
 
 dependencies {
+    implementation(project(":common:dependency-manager:di-lib"))
+
+    implementation(project(":feature-a:feature-a-domain"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
