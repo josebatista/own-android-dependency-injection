@@ -2,7 +2,6 @@ package io.github.josebatista
 
 import com.google.devtools.ksp.KspExperimental
 import com.google.devtools.ksp.getConstructors
-import com.google.devtools.ksp.getDeclaredFunctions
 import com.google.devtools.ksp.getDeclaredProperties
 import com.google.devtools.ksp.isAnnotationPresent
 import com.google.devtools.ksp.processing.CodeGenerator
@@ -21,13 +20,12 @@ import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSValueArgument
 import com.google.devtools.ksp.symbol.KSVisitorVoid
 import com.google.devtools.ksp.validate
-import io.github.josebatista.di.Binds
+import io.github.josebatista.di.Bind
 import io.github.josebatista.di.Component
 import java.io.OutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.reflect.KClass
-
 
 class ComponentProcessorProvider : SymbolProcessorProvider {
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
@@ -37,12 +35,12 @@ class ComponentProcessorProvider : SymbolProcessorProvider {
     data class ComponentFactory(
         val type: KSClassDeclaration,
         val constructorParameters: List<KSDeclaration>,
-        val isSingleton: Boolean
+        val isSingleton: Boolean,
     )
 
     data class EntryPoint(
         val propertyDeclaration: KSPropertyDeclaration,
-        val propertyType: KSDeclaration
+        val propertyType: KSDeclaration,
     )
 
     class ComponentModel(
@@ -52,10 +50,10 @@ class ComponentProcessorProvider : SymbolProcessorProvider {
         val componentInterfaceName: String,
         val factories: List<ComponentFactory>,
         val binds: Map<KSDeclaration, KSDeclaration>,
-        val entryPoints: List<EntryPoint>
+        val entryPoints: List<EntryPoint>,
     )
 
-    class ComponentProcessor(val codeGenerator: CodeGenerator) : SymbolProcessor {
+    class ComponentProcessor(private val codeGenerator: CodeGenerator) : SymbolProcessor {
         override fun process(resolver: Resolver): List<KSAnnotated> {
             val annotatedSymbols = resolver.getSymbolsWithAnnotation(Component::class.java.name)
             val unprocessedSymbols = annotatedSymbols.filter { !it.validate() }.toList()
@@ -72,13 +70,15 @@ class ComponentProcessorProvider : SymbolProcessorProvider {
                 val componentInterfaceName = classDeclaration.simpleName.asString()
                 val packageName = classDeclaration.containingFile!!.packageName.asString()
                 val className = "Generated$componentInterfaceName"
-                val componentAnnotation = classDeclaration.annotations.single { it isInstance Component::class }
+                val componentAnnotation =
+                    classDeclaration.annotations.single { it isInstance Component::class }
                 val entryPoints = readEntryPoints(classDeclaration)
                 val entryPointTypes = entryPoints.map { it.propertyType }
                 val binds = readBinds(componentAnnotation)
                 val bindProvidedTypes = binds.values
                 val factories = traverseDependencyGraph(entryPointTypes + bindProvidedTypes)
-                val importDeclarations = entryPointTypes + bindProvidedTypes + factories.map { it.type }
+                val importDeclarations =
+                    entryPointTypes + bindProvidedTypes + factories.map { it.type }
                 val actualImports = importDeclarations
                     .filter { it.packageName != classDeclaration.packageName }
                     .map { it.qualifiedName!!.asString() }.toSet() +
@@ -112,12 +112,16 @@ class ComponentProcessorProvider : SymbolProcessorProvider {
                 val bindsModules = componentAnnotation.getArgument("modules").value as List<KSType>
                 val binds = bindsModules
                     .map { it.declaration as KSClassDeclaration }
-                    .flatMap { it.getDeclaredFunctions() }
-                    .filter { it.isAnnotationPresent(Binds::class) }
-                    .associate { function ->
-                        val resolvedReturnType = function.returnType!!.resolve().declaration
-                        val resolvedParamType = function.parameters.single().type.resolve().declaration
-                        resolvedReturnType to resolvedParamType
+                    .flatMap { it.annotations }
+                    .filter { it isInstance Bind::class }
+                    .associate { annotation ->
+                        val annotationArguments = annotation
+                            .annotationType.resolve().arguments
+                        val requested = annotationArguments.first()
+                            .type!!.resolve().declaration
+                        val provided = annotationArguments.last()
+                            .type!!.resolve().declaration
+                        requested to provided
                     }
                 return binds
             }
@@ -139,10 +143,16 @@ class ComponentProcessorProvider : SymbolProcessorProvider {
                         }
                         if (injectConstructors.isNotEmpty()) {
                             val injectConstructor = injectConstructors.first()
-                            val constructorParams = injectConstructor.parameters.map { it.type.resolve().declaration }
+                            val constructorParams =
+                                injectConstructor.parameters.map { it.type.resolve().declaration }
                             typesToProcess += constructorParams
-                            val isSingleton = visitedClassDeclaration.isAnnotationPresent(Singleton::class)
-                            factories += ComponentFactory(visitedClassDeclaration, constructorParams, isSingleton)
+                            val isSingleton =
+                                visitedClassDeclaration.isAnnotationPresent(Singleton::class)
+                            factories += ComponentFactory(
+                                visitedClassDeclaration,
+                                constructorParams,
+                                isSingleton
+                            )
                         }
                     }
                 }
