@@ -33,6 +33,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":common:dependency-manager:di-lib"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
